@@ -1,7 +1,7 @@
 contract Left {
-	address public right;
+    address public right;
 
-	function Left(address _right) {
-		right = _right;
-	}
+    function Left(address _right) {
+        right = _right;
+    }
 }
