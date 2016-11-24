@@ -1,6 +1,5 @@
 module.exports = function(deployer) {
-    // You need to npm install -g ethereumjs-util
-    var ethJsUtil = require('/usr/lib/node_modules/ethereumjs-util/');
+    var ethJsUtil = require('../node_modules/ethereumjs-util/');
 
     var currentNonce = web3.eth.getTransactionCount(web3.eth.accounts[0]);
     var futureLeftNonce = currentNonce;

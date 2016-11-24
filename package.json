@@ -1,0 +1,8 @@
+{
+    "name": "b9lab-cyclical-dependency",
+    "version": "0.0.1",
+    "private": true,
+    "dependencies": {
+        "ethereumjs-util": "5.0.1"
+    }
+}
