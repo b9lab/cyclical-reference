@@ -1,18 +1,62 @@
 module.exports = {
     init: function (web3, assert) {
+
+        // Let's promisify our calls.
+        // Pipes values from a Web3 callback.
+        var callbackToResolve = function (resolve, reject) {
+            return function (error, value) {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(value);
+                    }
+                };
+        };
+
+        // List synchronous functions masquerading as values.
+        var syncGetters = {
+            db: [],
+            eth: [ "accounts", "blockNumber", "coinbase", "gasPrice", "hashrate",
+                "mining", "protocolVersion", "syncing" ],
+            net: [ "listening", "peerCount" ],
+            personal: [ "listAccounts" ],
+            shh: [],
+            version: [ "ethereum", "network", "node", "whisper" ]
+        };
+
+        Object.keys(syncGetters).forEach(function(group) {
+            Object.keys(web3[group]).forEach(function (method) {
+                if (syncGetters[group].indexOf(method) > -1) {
+                    // Skip
+                } else if (typeof web3[group][method] === "function") {
+                    web3[group][method + "Promise"] = function () {
+                        var args = arguments;
+                        return new Promise(function (resolve, reject) {
+                            args[args.length] = callbackToResolve(resolve, reject);
+                            args.length++;
+                            web3[group][method].apply(web3[group], args);
+                        });
+                    };
+                }
+            });
+        });
+
         web3.eth.getTransactionReceiptMined = function (txnHash, interval) {
             var transactionReceiptAsync;
             interval = interval ? interval : 500;
             transactionReceiptAsync = function(txnHash, resolve, reject) {
                 try {
-                    var receipt = web3.eth.getTransactionReceipt(txnHash);
-                    if (receipt == null) {
-                        setTimeout(function () {
-                            transactionReceiptAsync(txnHash, resolve, reject);
-                        }, interval);
-                    } else {
-                        resolve(receipt);
-                    }
+                    web3.eth.getTransactionReceipt(txnHash, function(error, receipt) {
+                        if (error) {
+                            reject(error);
+                        } else if (receipt == null) {
+                            setTimeout(function () {
+                                transactionReceiptAsync(txnHash, resolve, reject);
+                            }, interval);
+                        } else {
+                            resolve(receipt);
+                        }
+                    });
                 } catch(e) {
                     reject(e);
                 }
@@ -20,7 +64,7 @@ module.exports = {
 
             if (Array.isArray(txnHash)) {
                 var promises = [];
-                txnHash.forEach(function (oneTxHash) {
+                txnHash.forEach(function (oneTxHash, index) {
                     promises.push(web3.eth.getTransactionReceiptMined(oneTxHash, interval));
                 });
                 return Promise.all(promises);
@@ -31,25 +75,52 @@ module.exports = {
             }
         };
 
-        web3.eth.signPromise = function (account, dataToSign) {
-            return new Promise(function (resolve, reject) {
-                web3.eth.sign(account, dataToSign, function (error, value) {
-                    if (error) {
-                        reject(error);
-                    } else {
-                        resolve(value);
-                    }
-                });
+        web3.miner = web3.miner ? web3.miner : {};
+        web3.miner.start = web3.miner.start ? web3.miner.start : function(count) {
+            var params = JSON.stringify({
+                "jsonrpc":"2.0",
+                "method":"miner_start",
+                "params":[count],
+                "id":74
             });
+
+            var options = {
+                hostname: "localhost",
+                port: 8545,
+                method: "POST"
+            };
+
+            var req = Http.request(options);
+            req.write(params);
+            req.end();
+        };
+
+        web3.miner.stop = web3.miner.stop ? web3.miner.stop : function() {
+            var params = JSON.stringify({
+                "jsonrpc":"2.0",
+                "method":"miner_stop",
+                "params":[],
+                "id":74
+            });
+
+            var options = {
+                hostname: "localhost",
+                port: 8545,
+                method: "POST"
+            };
+
+            var req = Http.request(options);
+            req.write(params);
+            req.end();
         };
 
         assert.isTxHash = function (txnHash, message) {
             assert(typeof txnHash === "string",
-                'expected #{txnHash} to be a string',
-                'expected #{txnHash} to not be a string');
+                'expected ' + txnHash + ' to be a string',
+                'expected ' + txnHash + ' to not be a string');
             assert(txnHash.length === 66,
-                'expected #{txnHash} to be a 66 character transaction hash (0x...)',
-                'expected #{txnHash} to not be a 66 character transaction hash (0x...)');
+                'expected ' + txnHash + ' to be a 66 character transaction hash (0x...)',
+                'expected ' + txnHash + ' to not be a 66 character transaction hash (0x...)');
 
             // Convert txnHash to a number. Make sure it's not zero.
             // Controversial: Technically there is that edge case where
@@ -143,15 +214,19 @@ module.exports = {
     makeSureHasAtLeast: function (richAccount, recipients, wei) {
         var requests = [];
         recipients.forEach(function (recipient) {
-            if (web3.eth.getBalance(recipient).lessThan(wei)) {
-                requests.push(web3.eth.sendTransaction({
-                    from: richAccount,
-                    to: recipient,
-                    value: web3.toWei(2)
-                }));
-            }
+            requests.push(web3.eth.getBalancePromise(recipient)
+                .then(function (balance) {
+                    if (balance.lessThan(wei)) {
+                        return web3.eth.sendTransactionPromise({
+                            from: richAccount,
+                            to: recipient,
+                            value: wei
+                        });
+                    }
+                })
+            );
         });
-        return requests;
+        return Promise.all(requests);
     },
 
     makeSureAreUnlocked: function (accounts) {
