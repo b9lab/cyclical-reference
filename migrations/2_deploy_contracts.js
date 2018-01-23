@@ -1,29 +1,29 @@
+const Promise = require("bluebird");
 const Left = artifacts.require("./Left.sol");
 const Right = artifacts.require("./Right.sol");
-const ethJsUtil = require('../node_modules/ethereumjs-util/');
-Extensions = require("../utils/extensions.js");
-Extensions.init(web3, {});
+const ethUtil = require('../node_modules/ethereumjs-util/');
+const sequentialPromise = require("../utils/sequentialPromise.js");
 
-module.exports = function(deployer) {
+if (typeof web3.eth.getBlockPromise !== "function") {
+    Promise.promisifyAll(web3.eth, { suffix: "Promise" });
+}
 
-    var account0;
+module.exports = function(deployer, network, accounts) {
 
     return deployer
-        .then(() => web3.eth.getAccountsPromise())
-        .then(accounts => {
-            account0 = accounts[0];
-            return web3.eth.getTransactionCountPromise(account0);
-        })
+        .then(() => web3.eth.getTransactionCountPromise(accounts[0]))
         .then(currentNonce => {
-            var futureLeftNonce = currentNonce;
-            var futureLeftAddress = ethJsUtil.bufferToHex(ethJsUtil.generateAddress(
-                account0, futureLeftNonce));
-            var futureRightNonce = futureLeftNonce + 1;
-            var futureRightAddress = ethJsUtil.bufferToHex(ethJsUtil.generateAddress(
-                account0, futureRightNonce));
+            const futureLeftNonce = currentNonce;
+            const futureLeftAddress = ethUtil.bufferToHex(ethUtil.generateAddress(
+                accounts[0], futureLeftNonce));
+            const futureRightNonce = futureLeftNonce + 1;
+            const futureRightAddress = ethUtil.bufferToHex(ethUtil.generateAddress(
+                accounts[0], futureRightNonce));
 
-            deployer.deploy(Left, futureRightAddress);
-            deployer.deploy(Right, futureLeftAddress);
+            return sequentialPromise([
+                    () => deployer.deploy(Left, futureRightAddress),
+                    () => deployer.deploy(Right, futureLeftAddress)
+                ]);
         });
 
 };

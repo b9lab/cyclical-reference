@@ -1,19 +1,39 @@
+const Promise = require("bluebird");
 const Left = artifacts.require("./Left.sol");
 const Right = artifacts.require("./Right.sol");
 
-ethJsUtil = require('../node_modules/ethereumjs-util/');
-Extensions = require("../utils/extensions.js");
-Extensions.init(web3, assert);
+const ethUtil = require('../node_modules/ethereumjs-util/');
+web3.eth.makeSureAreUnlocked = require("../utils/makeSureAreUnlocked.js");
+const sequentialPromise = require("../utils/sequentialPromise.js");
+
+if (typeof web3.eth.getBlockPromise !== "function") {
+    Promise.promisifyAll(web3.eth, { suffix: "Promise" });
+}
 
 contract('Left and Right', function(accounts) {
-    var owner;
-    var left;
-    var right;
+    let owner;
+    let left;
+    let right;
 
     before("should prepare accounts", function() {
         assert.isAbove(accounts.length, 1, "should have at least 1 account");
         owner = accounts[0];
-        return Extensions.makeSureAreUnlocked([ owner ]);
+        return web3.eth.makeSureAreUnlocked([ owner ]);
+    });
+
+    it("should have deployed with each other's address in migration", function() {
+        return sequentialPromise([
+                () =>  Left.deployed(),
+                () => Right.deployed()
+            ])
+            .then(([ left, right ]) => sequentialPromise([
+                    () => left.right(),
+                    () => right.left()
+                ])
+                .then(([ rightAddress, leftAddress ]) => {
+                    assert.strictEqual(rightAddress, right.address, "should have been the same right address");
+                    assert.strictEqual(leftAddress, left.address, "should have been the same left address");
+                }))
     });
 
     describe("Cyclical", function() {
@@ -22,16 +42,16 @@ contract('Left and Right', function(accounts) {
 
             return web3.eth.getTransactionCountPromise(owner)
                 .then(currentNonce => {
-                    var futureLeftNonce = currentNonce;
-                    var futureLeftAddress = ethJsUtil.bufferToHex(ethJsUtil.generateAddress(
+                    const futureLeftNonce = currentNonce;
+                    const futureLeftAddress = ethUtil.bufferToHex(ethUtil.generateAddress(
                         owner, futureLeftNonce));
-                    var futureRightNonce = futureLeftNonce + 1;
-                    var futureRightAddress = ethJsUtil.bufferToHex(ethJsUtil.generateAddress(
+                    const futureRightNonce = futureLeftNonce + 1;
+                    const futureRightAddress = ethUtil.bufferToHex(ethUtil.generateAddress(
                         owner, futureRightNonce));
 
-                    return Promise.all([ 
-                            Left.new(futureRightAddress),
-                            Right.new(futureLeftAddress)
+                    return sequentialPromise([ 
+                            () => Left.new(futureRightAddress),
+                            () => Right.new(futureLeftAddress)
                         ]);
                 })
                 .then(createds => {
@@ -44,14 +64,13 @@ contract('Left and Right', function(accounts) {
         it("should have each other's address", function() {
 
             return left.right()
-                .then(rightAddress => {
-                    assert.equal(
+                .then(rightAddress => assert.strictEqual(
                         rightAddress,
                         right.address,
-                        "should have been the same right address");
-                    return right.left();
-                })
-                .then(leftAddress => assert.equal(
+                        "should have been the same right address")
+                )
+                .then(() => right.left())
+                .then(leftAddress => assert.strictEqual(
                     leftAddress,
                     left.address,
                     "should have been the same left address"));
