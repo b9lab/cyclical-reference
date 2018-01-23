@@ -3,6 +3,10 @@
     "version": "0.0.1",
     "private": true,
     "dependencies": {
+        "bluebird": "^3.5.1",
         "ethereumjs-util": "5.0.1"
+    },
+    "devDependencies": {
+        "truffle": "^3.4.11"
     }
 }
