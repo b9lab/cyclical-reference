@@ -9,8 +9,8 @@ module.exports = function makeSureAreUnlocked(accounts) {
     return sequentialPromise(accounts.map(
         (account, index) => {
             return () => self.signPromise(
-                account,
-                "0x0000000000000000000000000000000000000000000000000000000000000000")
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+                account)
                 .catch(error => {
                     if (error.message == "account is locked") {
                         throw Error("account " + account + " at index " + index + " is locked");

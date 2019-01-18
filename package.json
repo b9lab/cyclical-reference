@@ -7,6 +7,6 @@
         "ethereumjs-util": "5.0.1"
     },
     "devDependencies": {
-        "truffle": "^3.4.11"
+        "truffle": "^5.0.2"
     }
 }

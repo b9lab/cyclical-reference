@@ -1,9 +1,9 @@
-pragma solidity ^0.4.4;
+pragma solidity >=0.4.25 <0.6.0;
 
 contract Left {
     address public right;
 
-    function Left(address _right) {
+    constructor(address _right) public {
         right = _right;
     }
 }
